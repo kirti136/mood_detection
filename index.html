@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=300, height=600, user-scalable=no">
+  <title>Mood Movie Recommender</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      width: 300px;
+      height: 600px;
+      font-family: sans-serif;
+      background-color: #111;
+      color: #fff;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .scanner-container {
+      width: 100%;
+      height: 300px;
+      position: relative;
+      overflow: hidden;
+      background-color: #000;
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .scanner-bar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 5px;
+      background: rgba(0, 255, 0, 0.6);
+    }
+
+    .btn {
+      display: block;
+      width: 80%;
+      margin: 20px auto;
+      padding: 10px;
+      background-color: #00f2ff;
+      color: #000;
+      font-weight: bold;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      text-align: center;
+      transition: background 0.3s;
+    }
+
+    .btn:hover {
+      background-color: #0ff;
+    }
+
+    .fallback {
+      text-align: center;
+      margin-top: 10px;
+      font-size: 14px;
+      cursor: pointer;
+      color: #ccc;
+      text-decoration: underline;
+    }
+
+    #result {
+      text-align: center;
+      padding: 10px;
+    }
+
+    #movie-img {
+      width: 80%;
+      margin: 10px auto;
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="scanner-container">
+    <video id="video" autoplay muted></video>
+    <div class="scanner-bar"></div>
+  </div>
+
+  <button class="btn" id="checkMoodBtn">Check My Mood</button>
+  <div class="fallback" onclick="manualSelect()">No Pic? No problem! Choose your mood</div>
+
+  <canvas id="canvas" width="300" height="300" style="display: none;"></canvas>
+  <div id="result"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+  <script>
+    // Mood-based movie options
+    const movies = {
+      Happy: {
+        name: "Welcome",
+        link: "https://www.primevideo.com/detail/0MJFLZHIV04F9V9V21RAY2Z8ZZ/",
+        thumbnail: "https://m.media-amazon.com/images/S/pv-target-images/af13e1c59556eb143d2b213c9f95567677f409033d4c9619c553367d71bee982._SX1920_FMwebp_.jpg",
+      },
+      Sad: {
+        name: "Call me Bae",
+        link: "https://www.primevideo.com/detail/0TF2BODX83KZOWTP08NXFE897E/",
+        thumbnail: "https://m.media-amazon.com/images/S/pv-target-images/0cb7ac74d1d6e8eb2e3d59aa5354359714eb54d84fcfaa616d9de19d64b492ca._SX1920_FMwebp_.jpg",
+      },
+      Excited: {
+        name: "Citadel Honey Bunny",
+        link: "https://www.primevideo.com/detail/0KYRVT4JDB957NXZO72E2MIFW5",
+        thumbnail: "https://m.media-amazon.com/images/S/pv-target-images/51c2c75da778c109ccc33ff293ff48f0cccc60b18c3fef8a42afe2a80e07acac._SX1920_FMwebp_.jpg",
+      },
+      Neutral: {
+        name: "Farzi",
+        link: "https://www.primevideo.com/detail/0HDHQAUF5LPWOJRCO025LFJSJI",
+        thumbnail: "https://m.media-amazon.com/images/S/pv-target-images/8aed532f0875925f72c4012aab688ed409773ecbfb3b18e1a39cd9ad1a4dd485._SX1920_FMwebp_.jpg",
+      },
+      Angry: {
+        name: "Agneepath",
+        link: "https://www.primevideo.com/detail/0NU7IFXPL2WWSDHNGAR5Z1GUJE/",
+        thumbnail: "https://images-eu.ssl-images-amazon.com/images/S/pv-target-images/1863426056ae862def9a69ca76e8af54cdb6b8a5a2be1100e096e59b00060847._UX1920_.png",
+      },
+    };
+
+    // Animate scanner
+    gsap.to(".scanner-bar", {
+      y: 290,
+      duration: 2,
+      repeat: -1,
+      yoyo: true,
+      ease: "power1.inOut"
+    });
+
+    // Start video
+    const video = document.getElementById('video');
+    navigator.mediaDevices.getUserMedia({ video: true }).then((stream) => {
+      video.srcObject = stream;
+    });
+
+    function captureImage() {
+      const canvas = document.getElementById('canvas');
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL('image/jpeg');
+    }
+
+    async function detectMood(base64Image) {
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer YOUR_OPENAI_API_KEY`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "gpt-4-vision-preview",
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: "What mood does this face show? Reply with only one word from: Happy, Excited, Neutral, Angry, Sad." },
+                { type: "image_url", image_url: { url: base64Image } }
+              ]
+            }
+          ],
+          max_tokens: 10
+        })
+      });
+
+      const data = await response.json();
+      const mood = data.choices?.[0]?.message?.content?.trim();
+      return ["Happy", "Excited", "Neutral", "Angry", "Sad"].includes(mood) ? mood : "Neutral";
+    }
+
+    async function showMovieRecommendation(mood) {
+      const movie = movies[mood];
+      const resultDiv = document.getElementById("result");
+
+      resultDiv.innerHTML = `
+        <h3>You seem <strong>${mood}</strong></h3>
+        <p>We recommend: <strong>${movie.name}</strong></p>
+        <img id="movie-img" src="${movie.thumbnail}" />
+        <a href="${movie.link}" target="_blank">
+          <button class="btn">Watch Now</button>
+        </a>
+        <button class="btn" onclick="scanAgain()">Scan Again</button>
+      `;
+    }
+
+    document.getElementById("checkMoodBtn").addEventListener("click", async () => {
+      const img = captureImage();
+      const mood = await detectMood(img);
+      showMovieRecommendation(mood);
+    });
+
+    function scanAgain() {
+      document.getElementById("result").innerHTML = "";
+    }
+
+    function manualSelect() {
+      const mood = prompt("Choose your mood: Happy, Excited, Neutral, Angry, Sad");
+      const valid = ["Happy", "Excited", "Neutral", "Angry", "Sad"];
+      if (valid.includes(mood)) {
+        showMovieRecommendation(mood);
+      } else {
+        alert("Invalid mood selected.");
+      }
+    }
+  </script>
+</body>
+</html>
